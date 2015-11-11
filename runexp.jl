@@ -3,7 +3,7 @@ using ConjugatePriors
 using PyPlot
 using Base.Test
 
-import Base: rand, mean, maximum, minimum
+import Base: rand, mean, maximum, minimum, string
 import ConjugatePriors: NormalGamma
 
 push!(LOAD_PATH, ".")
@@ -93,6 +93,19 @@ function minimum(D::RareDist)
     end
 end
 
+function string(D::RareDist)
+
+    if D.p == 0.
+        return string(D.D)
+    else
+        if D.r_type == :real
+            return string(D.p) * ", " * string(D.r) * "; " * string(1 - D.p) * ", " * string(D.D)
+        elseif D.r_type == :dist
+            return string(D.p) * ", " * string(D.Dr) * "; " * string(1 - D.p) * ", " * string(D.D)
+        end
+    end
+end
+
 
 type UCBInt
     
@@ -145,7 +158,7 @@ function UCB(ucb::UCBInt, c::Float64)
 end
 
 
-function UCB_A(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbol = :UCB1, bPlot::Bool = false, plotfunc::Symbol = :semilogx)
+function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbol = :UCB1, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 1)
 
     nArms = length(rewards)
 
@@ -155,10 +168,11 @@ function UCB_A(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbo
 
     N_hist = zeros(Int64, nArms, n)
     Q_hist = zeros(nArms, n)
+    Qv_hist = zeros(nArms, n)
 
     nParams = length(params)
 
-    ucb = hist(UCBInt, nParams)
+    ucb = Array(UCBInt, nParams)
 
     for i = 1:nParams
         ucb[i] = UCBInt(rewards)
@@ -221,6 +235,7 @@ function UCB_A(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbo
             end
             N_hist[a_, i] = N[a_]
             Q_hist[a_, i] = Q[a_]
+            Qv_hist[a_, i] = Qv[a_]
         end
 
         Nc_total += 1
@@ -264,6 +279,16 @@ function UCB_A(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbo
         ylabel("Qc")
         legend([string(round(Int64, params[i])) for i = 1:nParams], loc = "best")
 
+        if verbose > 0
+            figure()
+            for a_ = 1:nArms
+                eval(plotfunc)(1:n, vec(N_hist[a_, :]))
+            end
+            xlabel("Number of plays")
+            ylabel("N")
+            legend([string(i) for i = 1:nArms], loc = "best")
+        end
+
         figure()
         for a_ = 1:nArms
             eval(plotfunc)(1:n, vec(Q_hist[a_, :]))
@@ -272,13 +297,15 @@ function UCB_A(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbo
         ylabel("Q")
         legend([string(i) for i = 1:nArms], loc = "best")
 
-        #figure()
-        #for a_ = 1:nArms
-        #    eval(plotfunc)(1:n, vec(N_hist[a_, :]))
-        #end
-        #xlabel("Number of plays")
-        #ylabel("Number of plays of each machine")
-        #legend([string(i) for i = 1:nArms], loc = "best")
+        if verbose > 0
+            figure()
+            for a_ = 1:nArms
+                eval(plotfunc)(1:n, vec(Qv_hist[a_, :]))
+            end
+            xlabel("Number of plays")
+            ylabel("Qv")
+            legend([string(i) for i = 1:nArms], loc = "best")
+        end
 
         figure()
         eval(plotfunc)(1:n, Regret)
@@ -289,14 +316,14 @@ function UCB_A(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbo
         eval(plotfunc)(1:n, Played * 100)
         ylim([0, 100])
         xlabel("Number of plays")
-        ylabel("% of best machine played")
+        ylabel("% of best arm played")
     end
-    
-    return N_total, N, Q, Q_hist, Regret, Played, c_hist, Qc_hist
+
+    return N_total, N, N_hist, Q, Q_hist, Qv_hist, Regret, Played, c_hist, Qc_hist
 end
 
 
-function ThompsonSampling(rewards; n::Int64 = 10000, bPlot::Bool = false, plotfunc::Symbol = :semilogx)
+function ThompsonSampling(rewards; n::Int64 = 10000, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 1)
 
     nArms = length(rewards)
 
@@ -306,6 +333,7 @@ function ThompsonSampling(rewards; n::Int64 = 10000, bPlot::Bool = false, plotfu
 
     N_hist = zeros(Int64, nArms, n)
     Q_hist = zeros(nArms, n)
+    Qv_hist = zeros(nArms, n)
 
     S = zeros(Int64, nArms)
     F = zeros(Int64, nArms)
@@ -339,6 +367,7 @@ function ThompsonSampling(rewards; n::Int64 = 10000, bPlot::Bool = false, plotfu
         for j = 1:nArms
             N_hist[j, i] = N[j]
             Q_hist[j, i] = Q[j]
+            Qv_hist[j, i] = Qv[j]
             if S[j] + F[j] > 0
                 S_hist[j, i] = S[j] / (S[j] + F[j])
             end
@@ -366,6 +395,16 @@ function ThompsonSampling(rewards; n::Int64 = 10000, bPlot::Bool = false, plotfu
         ylabel("Theta")
         legend([string(i) for i = 1:nArms], loc = "best")
 
+        if verbose > 0
+            figure()
+            for a_ = 1:nArms
+                eval(plotfunc)(1:n, vec(N_hist[a_, :]))
+            end
+            xlabel("Number of plays")
+            ylabel("N")
+            legend([string(i) for i = 1:nArms], loc = "best")
+        end
+
         figure()
         for a_ = 1:nArms
             eval(plotfunc)(1:n, vec(Q_hist[a_, :]))
@@ -374,13 +413,15 @@ function ThompsonSampling(rewards; n::Int64 = 10000, bPlot::Bool = false, plotfu
         ylabel("Q")
         legend([string(i) for i = 1:nArms], loc = "best")
 
-        #figure()
-        #for a_ = 1:nArms
-        #    eval(plotfunc)(1:n, vec(N_hist[a_, :]))
-        #end
-        #xlabel("Number of plays")
-        #ylabel("Number of plays of each machine")
-        #legend([string(i) for i = 1:nArms], loc = "best")
+        if verbose > 0
+            figure()
+            for a_ = 1:nArms
+                eval(plotfunc)(1:n, vec(Qv_hist[a_, :]))
+            end
+            xlabel("Number of plays")
+            ylabel("Qv")
+            legend([string(i) for i = 1:nArms], loc = "best")
+        end
 
         figure()
         eval(plotfunc)(1:n, Regret)
@@ -391,10 +432,10 @@ function ThompsonSampling(rewards; n::Int64 = 10000, bPlot::Bool = false, plotfu
         eval(plotfunc)(1:n, Played * 100)
         ylim([0, 100])
         xlabel("Number of plays")
-        ylabel("% of best machine played")
+        ylabel("% of best arm played")
     end
     
-    return N_total, N, Q, Q_hist, Regret, Played, S_hist
+    return N_total, N, N_hist, Q, Q_hist, Qv_hist, Regret, Played, S_hist
 end
 
 
@@ -587,7 +628,7 @@ function updateModel(am::ArmModel, q::Float64)
 end
 
 
-function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 10000, bPlot::Bool = false, plotfunc::Symbol = :semilogx, debug::Int64 = 0)
+function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 10000, bPlot::Bool = false, plotfunc::Symbol = :semilogx, debug::Int64 = 0, verbose::Int64 = 1)
 
     nArms = length(rewards)
 
@@ -597,6 +638,7 @@ function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 100
 
     N_hist = zeros(Int64, nArms, n)
     Q_hist = zeros(nArms, n)
+    Qv_hist = zeros(nArms, n)
 
     V_hist = zeros(nArms, n)
     mu_hist = zeros(nArms, n)
@@ -645,6 +687,7 @@ function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 100
         for j = 1:nArms
             N_hist[j, i] = N[j]
             Q_hist[j, i] = Q[j]
+            Qv_hist[j, i] = Qv[j]
 
             if AM[j].N > 0
                 V_hist[j, i] = AM[j].V / AM[j].N
@@ -713,6 +756,16 @@ function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 100
         ylabel("sigma_v")
         legend([string(i) for i = 1:nArms], loc = "best")
 
+        if verbose > 0
+            figure()
+            for a_ = 1:nArms
+                eval(plotfunc)(1:n, vec(N_hist[a_, :]))
+            end
+            xlabel("Number of plays")
+            ylabel("N")
+            legend([string(i) for i = 1:nArms], loc = "best")
+        end
+
         figure()
         for a_ = 1:nArms
             eval(plotfunc)(1:n, vec(Q_hist[a_, :]))
@@ -721,13 +774,15 @@ function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 100
         ylabel("Q")
         legend([string(i) for i = 1:nArms], loc = "best")
 
-        #figure()
-        #for a_ = 1:nArms
-        #    eval(plotfunc)(1:n, vec(N_hist[a_, :]))
-        #end
-        #xlabel("Number of plays")
-        #ylabel("Number of plays of each machine")
-        #legend([string(i) for i = 1:nArms], loc = "best")
+        if verbose > 0
+            figure()
+            for a_ = 1:nArms
+                eval(plotfunc)(1:n, vec(Qv_hist[a_, :]))
+            end
+            xlabel("Number of plays")
+            ylabel("Qv")
+            legend([string(i) for i = 1:nArms], loc = "best")
+        end
 
         figure()
         eval(plotfunc)(1:n, Regret)
@@ -738,23 +793,23 @@ function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 100
         eval(plotfunc)(1:n, Played * 100)
         ylim([0, 100])
         xlabel("Number of plays")
-        ylabel("% of best machine played")
+        ylabel("% of best arm played")
 
-        println("Best machine: ", bestArm, ", Best machine played: ", neat(Played[end] * 100), "%", ", U: ", U)
+        println("Best arm: ", bestArm, ", Best arm played: ", neat(Played[end] * 100), "%", ", U: ", neat(U))
         sleep(0.1)
     end
     
-    return N_total, N, Q, Q_hist, Regret, Played, V_hist, mu_hist, sigma_hist, mu_v_hist, sigma_v_hist
+    return N_total, N, N_hist, Q, Q_hist, Qv_hist, Regret, Played, V_hist, mu_hist, sigma_hist, mu_v_hist, sigma_v_hist
 end
 
 
-function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plotfunc::Symbol = :semilogx, debug::Int64 = 0)
+function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plotfunc::Symbol = :semilogx, debug::Int64 = 0, verbose::Int64 = 0)
 
-    if tree_policy[1] == :UCB_A
+    if tree_policy[1] == :A_UCB
         if length(tree_policy) == 2
-            return UCB_A(rewards, tree_policy[2], n = n, bPlot = bPlot, plotfunc = plotfunc)
+            return A_UCB(rewards, tree_policy[2], n = n, bPlot = bPlot, plotfunc = plotfunc)
         elseif length(tree_policy) == 3
-            return UCB_A(rewards, tree_policy[2], n = n, policy = tree_policy[3], bPlot = bPlot, plotfunc = plotfunc)
+            return A_UCB(rewards, tree_policy[2], n = n, policy = tree_policy[3], bPlot = bPlot, plotfunc = plotfunc)
         end
 
     elseif tree_policy[1] == :TS
@@ -767,6 +822,7 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
         nArms = length(rewards)
 
         Q_hist = zeros(nArms, n)
+        Qv_hist = zeros(nArms, n)
         N_hist = zeros(nArms, n)
         Var_hist = zeros(nArms, n)
 
@@ -887,6 +943,7 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
 
             for a_ = 1:nArms
                 Q_hist[a_, i] = Q[a_]
+                Qv_hist[a_, i] = Qv[a_]
                 N_hist[a_, i] = N[a_]
                 Var_hist[a_, i] = var_[a_]
             end
@@ -904,6 +961,17 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
         end
 
         if bPlot
+            if verbose > 0
+                figure()
+                for a_ = 1:nArms
+                    eval(plotfunc)(1:n, vec(N_hist[a_, :]))
+                end
+                xlabel("Number of plays")
+                ylabel("Number of plays of each arm")
+                legend([string(i) for i = 1:nArms], loc = "best")
+            end
+
+            figure()
             for a_ = 1:nArms
                 eval(plotfunc)(1:n, vec(Q_hist[a_, :]))
             end
@@ -911,21 +979,25 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
             ylabel("Q")
             legend([string(i) for i = 1:nArms], loc = "best")
 
-            #figure()
-            #for a_ = 1:nArms
-            #    eval(plotfunc)(1:n, vec(N_hist[a_, :]))
-            #end
-            #xlabel("Number of plays")
-            #ylabel("Number of plays of each machine")
-            #legend([string(i) for i = 1:nArms], loc = "best")
+            if verbose > 0
+                figure()
+                for a_ = 1:nArms
+                    eval(plotfunc)(1:n, vec(Qv_hist[a_, :]))
+                end
+                xlabel("Number of plays")
+                ylabel("Qv")
+                legend([string(i) for i = 1:nArms], loc = "best")
+            end
 
-            #figure()
-            #for a_ = 1:nArms
-            #    eval(plotfunc)(1:n, vec(Var_hist[a_, :]))
-            #end
-            #xlabel("Number of plays")
-            #ylabel("Variance")
-            #legend([string(i) for i = 1:nArms], loc = "best")
+            if verbose > 1
+                figure()
+                for a_ = 1:nArms
+                    eval(plotfunc)(1:n, vec(Var_hist[a_, :]))
+                end
+                xlabel("Number of plays")
+                ylabel("Variance")
+                legend([string(i) for i = 1:nArms], loc = "best")
+            end
 
             figure()
             eval(plotfunc)(1:n, Regret)
@@ -936,24 +1008,32 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
             eval(plotfunc)(1:n, Played * 100)
             ylim([0, 100])
             xlabel("Number of plays")
-            ylabel("% of best machine played")
+            ylabel("% of best arm played")
         end
 
-        return N_total, N, Q, Q_hist, Regret, Played
+        return N_total, N, N_hist, Q, Q_hist, Qv_hist, Regret, Played
     end
 end
 
 
-function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::Bool = false, plotfunc::Symbol = :semilogx)
+function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 0)
 
     nArms = length(rewards)
 
+    N_hist_acc = zeros(nArms, n)
     Q_hist_acc = zeros(nArms, n)
+    Qv_hist_acc = zeros(nArms, n)
     Regret_acc = zeros(n)
     Played_acc = zeros(n)
     nBestArm = 0
 
-    if tree_policy[1] == :UCB_A
+    N_end = zeros(nArms, N)
+    Q_end = zeros(nArms, N)
+    Qv_end = zeros(nArms, N)
+    Regret_end = zeros(N)
+    Played_end = zeros(N)
+
+    if tree_policy[1] == :A_UCB
         c_hist_acc = zeros(length(tree_policy[2]), n)
         Qc_hist_acc = zeros(length(tree_policy[2]), n)
     elseif tree_policy[1] == :TS
@@ -970,24 +1050,35 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
     bestArm = argmax(U)
 
     for i = 1:N
-        if tree_policy[1] == :UCB_A
-            N_total, N_, Q, Q_hist, Regret, Played, c_hist, Qc_hist = runExp(rewards, tree_policy, n = n)
+        if tree_policy[1] == :A_UCB
+            N_total, N_, N_hist, Q, Q_hist, Qv_hist, Regret, Played, c_hist, Qc_hist = runExp(rewards, tree_policy, n = n)
         elseif tree_policy[1] == :TS
-            N_total, N_, Q, Q_hist, Regret, Played, S_hist = runExp(rewards, tree_policy, n = n)
+            N_total, N_, N_hist, Q, Q_hist, Qv_hist, Regret, Played, S_hist = runExp(rewards, tree_policy, n = n)
         elseif tree_policy[1] == :TS_M
-            N_total, N_, Q, Q_hist, Regret, Played, V_hist, mu_hist, sigma_hist, mu_v_hist, sigma_v_hist = runExp(rewards, tree_policy, n = n)
+            N_total, N_, N_hist, Q, Q_hist, Qv_hist, Regret, Played, V_hist, mu_hist, sigma_hist, mu_v_hist, sigma_v_hist = runExp(rewards, tree_policy, n = n)
         else
-            N_total, N_, Q, Q_hist, Regret, Played = runExp(rewards, tree_policy, n = n)
+            N_total, N_, N_hist, Q, Q_hist, Qv_hist, Regret, Played = runExp(rewards, tree_policy, n = n)
+
         end
 
+        N_hist_acc += (N_hist .- N_hist_acc) ./ i
         Q_hist_acc += (Q_hist .- Q_hist_acc) ./ i
+        Qv_hist_acc += (Qv_hist .- Qv_hist_acc) ./ i
         Regret_acc += (Regret .- Regret_acc) ./ i
         Played_acc += (Played .- Played_acc) ./ i
         if argmax(Q) == bestArm
             nBestArm += 1
         end
 
-        if tree_policy[1] == :UCB_A
+        for j = 1:nArms
+            N_end[j, i] = N_hist[j, end]
+            Q_end[j, i] = Q_hist[j, end]
+            Qv_end[j, i] = Qv_hist[j, end]
+        end
+        Regret_end[i] = Regret[end]
+        Played_end[i] = Played[end]
+
+        if tree_policy[1] == :A_UCB
             c_hist_acc += (c_hist .- c_hist_acc) ./ i
             Qc_hist_acc += (Qc_hist .- Qc_hist_acc) ./ i
         elseif tree_policy[1] == :TS
@@ -1002,10 +1093,53 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
     end
     
     if bPlot
-        #println("nBestArm: ", nBestArm, " / ", N)
-        #sleep(0.1)
+        for i = 1:nArms
+            println("Arm ", i, ": ", string(rewards[i]))
+        end
 
-        if tree_policy[1] == :UCB_A
+        print("mean of reward:")
+        for i = 1:nArms
+            print((i == 1) ? " " : ", ", neat(U[i]))
+        end
+        println()
+        println()
+
+        println("Best arm: ", bestArm)
+        println("Best arm played: ", neat(Played_acc[end] * 100), "%")
+        println()
+
+        if verbose > 0
+            print("std(N[end]):")
+            for i = 1:nArms
+                print((i == 1) ? " " : ", ", neat(std(vec(N_end[i, :]))))
+            end
+            println()
+        end
+
+        print("std(Q[end]):")
+        for i = 1:nArms
+            print((i == 1) ? " " : ", ", neat(std(vec(Q_end[i, :]))))
+        end
+        println()
+
+        if verbose > 0
+            print("std(Qv[end]):")
+            for i = 1:nArms
+                print((i == 1) ? " " : ", ", neat(std(vec(Qv_end[i, :]))))
+            end
+            println()
+        end
+
+        print("std(Regret[end]): ", neat(std(Regret_end)))
+        println()
+
+        print("std(Played[end]): ", neat(std(Played_end * 100)))
+        println()
+
+        println()
+        sleep(0.1)
+
+        if tree_policy[1] == :A_UCB
             figure()
             for i = 1:length(tree_policy[2])
                 eval(plotfunc)(1:n, vec(c_hist_acc[i, :]) * 100)
@@ -1079,6 +1213,16 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
 
         end
 
+        if verbose > 0
+            figure()
+            for i = 1:nArms
+                eval(plotfunc)(1:n, vec(N_hist_acc[i, :]))
+            end
+            xlabel("Number of plays")
+            ylabel("N")
+            legend([string(i) for i = 1:nArms], loc = "best")
+        end
+
         figure()
         for i = 1:nArms
             eval(plotfunc)(1:n, vec(Q_hist_acc[i, :]))
@@ -1086,6 +1230,16 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
         xlabel("Number of plays")
         ylabel("Q")
         legend([string(i) for i = 1:nArms], loc = "best")
+
+        if verbose > 0
+            figure()
+            for i = 1:nArms
+                eval(plotfunc)(1:n, vec(Qv_hist_acc[i, :]))
+            end
+            xlabel("Number of plays")
+            ylabel("Qv")
+            legend([string(i) for i = 1:nArms], loc = "best")
+        end
         
         figure()
         eval(plotfunc)(1:n, Regret_acc)
@@ -1096,10 +1250,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
         eval(plotfunc)(1:n, Played_acc * 100)
         ylim([0, 100])
         xlabel("Number of plays")
-        ylabel("% of best machine played")
-
-        println("Best machine: ", bestArm, ", Best machine played: ", neat(Played_acc[end] * 100), "%", ", U: ", U)
-        sleep(0.1)
+        ylabel("% of best arm played")
     end
     
     return Regret_acc, Played_acc, nBestArm
@@ -1128,17 +1279,17 @@ function plotExpParam(rewards, tree_policy, params; n::Int64 = 10000, N::Int64 =
         eval(plotfunc)(1:n, Played_acc * 100)
         ylim([0, 100])
         xlabel("Number of plays")
-        ylabel("% of best machine played")
+        ylabel("% of best arm played")
         legend(labels, loc = "best")
     end
 end
 
 
-function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100, plotfunc::Symbol = :semilogx)
+function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100, plotfunc::Symbol = :semilogx, bPlotAvgRegret::Bool = false)
 
     U = map(mean, rewards)
     bestArm = argmax(U)
-    println("bestArm: ", bestArm, ", U: ", U)
+    println("bestArm: ", bestArm, ", U: ", neat(U))
     sleep(0.1)
 
     labels = ASCIIString[]
@@ -1169,7 +1320,11 @@ function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100,
         #sleep(0.1)
         
         figure(1)
-        eval(plotfunc)(1:n, Regret_acc)
+        if !bPlotAvgRegret
+            eval(plotfunc)(1:n, Regret_acc)
+        else
+            eval(plotfunc)(1:n, Regret_acc ./ collect(1:n))
+        end
         xlabel("Number of plays")
         ylabel("Regret")
         legend(labels, loc = "best")
@@ -1178,7 +1333,7 @@ function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100,
         eval(plotfunc)(1:n, Played_acc * 100)
         ylim([0, 100])
         xlabel("Number of plays")
-        ylabel("% of best machine played")
+        ylabel("% of best arm played")
         legend(labels, loc = "best")
     end
 end
