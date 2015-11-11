@@ -319,7 +319,7 @@ function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbo
         ylabel("% of best arm played")
     end
 
-    return N_total, N, N_hist, Q, Q_hist, Qv_hist, Regret, Played, c_hist, Qc_hist
+    return N_total, N, N_hist, Q, Q_hist, Regret, Played, c_hist, Qc_hist
 end
 
 
@@ -367,7 +367,7 @@ function ThompsonSampling(rewards; n::Int64 = 10000, bPlot::Bool = false, plotfu
         for j = 1:nArms
             N_hist[j, i] = N[j]
             Q_hist[j, i] = Q[j]
-            Qv_hist[j, i] = Qv[j]
+            Qv_hist[j, i] = theta[j]
             if S[j] + F[j] > 0
                 S_hist[j, i] = S[j] / (S[j] + F[j])
             end
@@ -687,7 +687,7 @@ function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 100
         for j = 1:nArms
             N_hist[j, i] = N[j]
             Q_hist[j, i] = Q[j]
-            Qv_hist[j, i] = Qv[j]
+            Qv_hist[j, i] = expected_reward[j]
 
             if AM[j].N > 0
                 V_hist[j, i] = AM[j].V / AM[j].N
@@ -1104,6 +1104,27 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
         println()
         println()
 
+        print("Policy: ")
+        if tree_policy[1] == :TS_M
+            println(string(tree_policy[1]))
+        else
+            str = string(tree_policy[1])
+            if length(tree_policy) > 1
+                str *= " ["
+            end
+            for i = 2:length(tree_policy)
+                if i > 2
+                    str *= ", "
+                end
+                str *= string(tree_policy[i])
+            end
+            if length(tree_policy) > 1
+                str *= "]"
+            end
+            println(str)
+        end
+        println()
+
         println("Best arm: ", bestArm)
         println("Best arm played: ", neat(Played_acc[end] * 100), "%")
         println()
@@ -1128,7 +1149,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
                 print((i == 1) ? " " : ", ", neat(std(vec(Qv_end[i, :]))))
             end
             println()
-        end
+    end
 
         print("std(Regret[end]): ", neat(std(Regret_end)))
         println()
@@ -1234,7 +1255,9 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
         if verbose > 0
             figure()
             for i = 1:nArms
-                eval(plotfunc)(1:n, vec(Qv_hist_acc[i, :]))
+                # XXX debug for TS_M
+                #eval(plotfunc)(1:n, vec(Qv_hist_acc[i, :]))
+                plot(1:n, vec(Qv_hist_acc[i, :]))
             end
             xlabel("Number of plays")
             ylabel("Qv")
@@ -1287,9 +1310,25 @@ end
 
 function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100, plotfunc::Symbol = :semilogx, bPlotAvgRegret::Bool = false)
 
+    nArms = length(rewards)
+
     U = map(mean, rewards)
     bestArm = argmax(U)
-    println("bestArm: ", bestArm, ", U: ", neat(U))
+
+    for i = 1:nArms
+        println("Arm ", i, ": ", string(rewards[i]))
+    end
+
+    print("mean of reward:")
+    for i = 1:nArms
+        print((i == 1) ? " " : ", ", neat(U[i]))
+    end
+    println()
+    println()
+
+    println("Best arm: ", bestArm)
+    println()
+
     sleep(0.1)
 
     labels = ASCIIString[]
