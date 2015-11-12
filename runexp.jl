@@ -158,7 +158,7 @@ function UCB(ucb::UCBInt, c::Float64)
 end
 
 
-function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbol = :UCB1, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 1)
+function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy = nothing, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 1)
 
     nArms = length(rewards)
 
@@ -185,7 +185,11 @@ function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbo
     Nc_hist = zeros(Int64, nParams, n)
     Qc_hist = zeros(nParams, n)
 
-    if policy == :Exp3
+    if policy == nothing
+        policy = [:UCB1, sqrt(2)]
+    end
+
+    if policy[1] == :Exp3
         K = nParams
 
         g = n
@@ -196,22 +200,21 @@ function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbo
     end
 
     for i = 1:n
-        if policy == :UCB1
+        if policy[1] == :UCB1
             Qv = zeros(nParams)
 
             for j = 1:nParams
                 if Nc[j] == 0
                     Qv[j] = Inf
                 else
-                    # XXX adjust exploration constant
-                    c = sqrt(1/2) * 100
+                    c = policy[2]
                     Qv[j] = Qc[j] + c * sqrt(log(Nc_total) / Nc[j])
                 end
             end
 
             j_ = argmax(Qv)
 
-        elseif policy == :Exp3
+        elseif policy[1] == :Exp3
             sum_w = sum(w)
 
             for j = 1:K
@@ -224,7 +227,7 @@ function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbo
 
         a, q = UCB(ucb[j_], params[j_])
 
-        if policy == :Exp3
+        if policy[1] == :Exp3
             w[j_] *= exp(gam * q / p[j_] / K)
         end
 
@@ -319,7 +322,7 @@ function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy::Symbo
         ylabel("% of best arm played")
     end
 
-    return N_total, N, N_hist, Q, Q_hist, Regret, Played, c_hist, Qc_hist
+    return N_total, N, N_hist, Q, Q_hist, Qv_hist, Regret, Played, c_hist, Qc_hist
 end
 
 
@@ -555,7 +558,7 @@ function outputArmModel(am::ArmModel)
     println("n_v: ", am.n_v, ", q_v: ", neat(am.q_v), ", s: ", neat(s), ", mu_v: ", neat(am.mu_v), ", lambda_v: ", neat(am.lambda_v), ", alpha_v: ", neat(am.alpha_v), ", beta_v: ", neat(am.beta_v))
 end
 
-function computeExpectedReward(am::ArmModel)
+function sampleFromModel(am::ArmModel)
 
     p = rand(Beta(am.V + am.V_alpha0, am.N - am.V + am.V_beta0))
 
@@ -565,7 +568,11 @@ function computeExpectedReward(am::ArmModel)
     mu_v, tau_v = rand(NormalGamma(am.mu_v, am.lambda_v, am.alpha_v, am.beta_v))
     r_v = rand(Normal(mu_v, sqrt(1 / tau_v)))
 
-    return (1 - p) * r + p * r_v
+    # expected reward
+    #return (1 - p) * r + p * r_v
+
+    # expected mean
+    return (1 - p) * mu + p * mu_v
 end
 
 function updateModel(am::ArmModel, q::Float64)
@@ -628,9 +635,11 @@ function updateModel(am::ArmModel, q::Float64)
 end
 
 
-function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 10000, bPlot::Bool = false, plotfunc::Symbol = :semilogx, debug::Int64 = 0, verbose::Int64 = 1)
+function ThompsonSamplingWithModel(rewards, generateArmModel::Function; n::Int64 = 10000, bPlot::Bool = false, plotfunc::Symbol = :semilogx, debug::Int64 = 0, verbose::Int64 = 1)
 
     nArms = length(rewards)
+
+    AM = generateArmModel(nArms)
 
     N_total = 0
     N = zeros(Int64, nArms)
@@ -646,7 +655,7 @@ function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 100
     mu_v_hist = zeros(nArms, n)
     sigma_v_hist = zeros(nArms, n)
 
-    expected_reward = zeros(nArms)
+    theta = zeros(nArms)
 
     if debug > 0
         println("i: 0")
@@ -664,10 +673,10 @@ function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 100
         end
 
         for j = 1:nArms
-            expected_reward[j] = computeExpectedReward(AM[j])
+            theta[j] = sampleFromModel(AM[j])
         end
 
-        k = argmax(expected_reward)
+        k = argmax(theta)
 
         q = rand(rewards[k])
 
@@ -687,7 +696,7 @@ function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 100
         for j = 1:nArms
             N_hist[j, i] = N[j]
             Q_hist[j, i] = Q[j]
-            Qv_hist[j, i] = expected_reward[j]
+            Qv_hist[j, i] = theta[j]
 
             if AM[j].N > 0
                 V_hist[j, i] = AM[j].V / AM[j].N
@@ -777,7 +786,8 @@ function ThompsonSamplingWithModel(rewards, AM::Vector{ArmModel}; n::Int64 = 100
         if verbose > 0
             figure()
             for a_ = 1:nArms
-                eval(plotfunc)(1:n, vec(Qv_hist[a_, :]))
+                #eval(plotfunc)(1:n, vec(Qv_hist[a_, :]))
+                plot(1:n, vec(Qv_hist[a_, :]))
             end
             xlabel("Number of plays")
             ylabel("Qv")
@@ -1255,9 +1265,11 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
         if verbose > 0
             figure()
             for i = 1:nArms
-                # XXX debug for TS_M
-                #eval(plotfunc)(1:n, vec(Qv_hist_acc[i, :]))
-                plot(1:n, vec(Qv_hist_acc[i, :]))
+                if tree_policy[1] == :TS_M
+                    plot(1:n, vec(Qv_hist_acc[i, :]))
+                else
+                    eval(plotfunc)(1:n, vec(Qv_hist_acc[i, :]))
+                end
             end
             xlabel("Number of plays")
             ylabel("Qv")
