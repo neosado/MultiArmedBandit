@@ -446,8 +446,8 @@ type ArmModel
 
     N::Int64
 
-    V_alpha0::Int64
-    V_beta0::Int64
+    V_alpha0::Union{Int64, Float64}
+    V_beta0::Union{Int64, Float64}
     V::Int64
 
     mu0::Float64        # mu_0
@@ -481,7 +481,7 @@ type ArmModel
     x2_v::Float64
 
 
-    function ArmModel(V_alpha0::Int64, V_beta0::Int64, mu0::Float64, lambda0::Float64, alpha0::Float64, beta0::Float64, v_bound::Float64, mu_v0::Float64, lambda_v0::Float64, alpha_v0::Float64, beta_v0::Float64)
+    function ArmModel(V_alpha0::Union{Int64, Float64}, V_beta0::Union{Int64, Float64}, mu0::Float64, lambda0::Float64, alpha0::Float64, beta0::Float64, v_bound::Float64, mu_v0::Float64, lambda_v0::Float64, alpha_v0::Float64, beta_v0::Float64)
 
         self = new()
 
@@ -1159,7 +1159,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
                 print((i == 1) ? " " : ", ", neat(std(vec(Qv_end[i, :]))))
             end
             println()
-    end
+        end
 
         print("std(Regret[end]): ", neat(std(Regret_end)))
         println()
@@ -1169,6 +1169,10 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
 
         println()
         sleep(0.1)
+
+        if n < 100
+            plotfunc = :plot
+        end
 
         if tree_policy[1] == :A_UCB
             figure()
@@ -1369,15 +1373,23 @@ function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100,
 
         #println("Tree Policy: ", tree_policy[1], ", nBestArm: ", nBestArm, " / ", N)
         #sleep(0.1)
+
+        if n < 100
+            plotfunc = :plot
+        end
         
         figure(1)
         if !bPlotAvgRegret
             eval(plotfunc)(1:n, Regret_acc)
         else
-            eval(plotfunc)(1:n, Regret_acc ./ collect(1:n))
+            plot(1:n, Regret_acc ./ collect(1:n))
         end
         xlabel("Number of plays")
-        ylabel("Regret")
+        if !bPlotAvgRegret
+            ylabel("Regret")
+        else
+            ylabel("Average regret")
+        end
         legend(labels, loc = "best")
 
         figure(2)
