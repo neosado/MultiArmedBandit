@@ -107,9 +107,11 @@ function string(D::RareDist)
 end
 
 
-type UCBInt
+type UCBSubArm
     
     rewards
+
+    c::Float64
     
     nArms::Int64
     
@@ -117,11 +119,13 @@ type UCBInt
     N::Vector{Int64}
     Q::Vector{Float64}
     
-    function UCBInt(rewards)
+    function UCBSubArm(rewards, c::Float64 = sqrt(2))
         
         self = new()
         
         self.rewards = rewards
+
+        self.c = c
         
         self.nArms = length(rewards)
         
@@ -133,32 +137,38 @@ type UCBInt
     end
 end
 
+genUCBSubArm(c::Float64) = rewards -> UCBSubArm(rewards, c)
 
-function UCB(ucb::UCBInt, c::Float64)
+function PlaySubArm(subarm::UCBSubArm)
 
-    Qv = zeros(ucb.nArms)
+    Qv = zeros(subarm.nArms)
     
-    for a_ = 1:ucb.nArms
-        if ucb.N[a_] == 0
+    for a_ = 1:subarm.nArms
+        if subarm.N[a_] == 0
             Qv[a_] = Inf
         else
-            Qv[a_] = ucb.Q[a_] + c * sqrt(log(ucb.N_total) / ucb.N[a_])
+            Qv[a_] = subarm.Q[a_] + subarm.c * sqrt(log(subarm.N_total) / subarm.N[a_])
         end
     end
     
     a = argmax(Qv)
     
-    q = rand(ucb.rewards[a])
+    q = rand(subarm.rewards[a])
     
-    ucb.N_total += 1
-    ucb.N[a] += 1
-    ucb.Q[a] += (q - ucb.Q[a]) / ucb.N[a]
+    subarm.N_total += 1
+    subarm.N[a] += 1
+    subarm.Q[a] += (q - subarm.Q[a]) / subarm.N[a]
 
     return a, q
 end
 
+function string(subarm::UCBSubArm)
 
-function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy = nothing, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 1)
+    return "UCB1(" * string(neat(subarm.c)) * ")"
+end
+
+
+function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy = nothing, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 1)
 
     nArms = length(rewards)
 
@@ -168,29 +178,29 @@ function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy = noth
 
     N_hist = zeros(Int64, nArms, n)
     Q_hist = zeros(nArms, n)
-    Qv_hist = zeros(nArms, n)
 
-    nParams = length(params)
+    nSubArms = length(genSubArms)
 
-    ucb = Array(UCBInt, nParams)
+    subarms = Array(UCBSubArm, nSubArms)
 
-    for i = 1:nParams
-        ucb[i] = UCBInt(rewards)
+    for i = 1:nSubArms
+        subarms[i] = genSubArms[i](rewards)
     end
 
     Nc_total = 0
-    Nc = zeros(Int64, nParams)
-    Qc = zeros(nParams)
+    Nc = zeros(Int64, nSubArms)
+    Qc = zeros(nSubArms)
+    Qv_hist = zeros(nArms, n)
 
-    Nc_hist = zeros(Int64, nParams, n)
-    Qc_hist = zeros(nParams, n)
+    Nc_hist = zeros(Int64, nSubArms, n)
+    Qc_hist = zeros(nSubArms, n)
 
     if policy == nothing
         policy = [:UCB1, sqrt(2)]
     end
 
     if policy[1] == :Exp3
-        K = nParams
+        K = nSubArms
 
         g = n
         gam = min(1, sqrt(K * log(K) / ((e - 1) * g)))
@@ -201,9 +211,9 @@ function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy = noth
 
     for i = 1:n
         if policy[1] == :UCB1
-            Qv = zeros(nParams)
+            Qv = zeros(nSubArms)
 
-            for j = 1:nParams
+            for j = 1:nSubArms
                 if Nc[j] == 0
                     Qv[j] = Inf
                 else
@@ -225,29 +235,29 @@ function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy = noth
 
         end
 
-        a, q = UCB(ucb[j_], params[j_])
+        a, q = PlaySubArm(subarms[j_])
 
         if policy[1] == :Exp3
             w[j_] *= exp(gam * q / p[j_] / K)
         end
 
         for a_ = 1:nArms
-            N[a_] = sum([ucb[j].N[a_] for j = 1:nParams])
+            N[a_] = sum([subarms[j].N[a_] for j = 1:nSubArms])
             if N[a_] > 0
-                Q[a_] = sum([ucb[j].Q[a_] * ucb[j].N[a_] for j = 1:nParams]) / N[a_]
+                Q[a_] = sum([subarms[j].Q[a_] * subarms[j].N[a_] for j = 1:nSubArms]) / N[a_]
             end
             N_hist[a_, i] = N[a_]
             Q_hist[a_, i] = Q[a_]
-            Qv_hist[a_, i] = Qv[a_]
         end
 
         Nc_total += 1
         Nc[j_] += 1
         Qc[j_] += (q - Qc[j_]) / Nc[j_]
 
-        for j = 1:nParams
+        for j = 1:nSubArms
             Nc_hist[j, i] = Nc[j]
             Qc_hist[j, i] = Qc[j]
+            Qv_hist[j, i] = Qv[j]
         end
     end
 
@@ -256,7 +266,7 @@ function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy = noth
     
     Regret = zeros(n)
     Played = zeros(n)
-    c_hist = zeros(nParams, n)
+    c_hist = zeros(nSubArms, n)
 
     for i = 1:n
         Regret[i] = dot((U[bestArm] - U), N_hist[:, i])
@@ -266,21 +276,21 @@ function A_UCB(rewards, params::Vector{Float64}; n::Int64 = 10000, policy = noth
     
     if bPlot
         figure()
-        for j = 1:nParams
+        for j = 1:nSubArms
             eval(plotfunc)(1:n, vec(c_hist[j, :]) * 100)
         end
         ylim([0, 100])
         xlabel("Number of plays")
         ylabel("% of c played")
-        legend([string(round(Int64, params[i])) for i = 1:nParams], loc = "best")
+        legend([string(subarms[i]) for i = 1:nSubArms], loc = "best")
 
         figure()
-        for j = 1:nParams
+        for j = 1:nSubArms
             eval(plotfunc)(1:n, vec(Qc_hist[j, :]))
         end
         xlabel("Number of plays")
         ylabel("Qc")
-        legend([string(round(Int64, params[i])) for i = 1:nParams], loc = "best")
+        legend([string(subarms[i]) for i = 1:nSubArms], loc = "best")
 
         if verbose > 0
             figure()
@@ -815,6 +825,58 @@ end
 
 function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plotfunc::Symbol = :semilogx, debug::Int64 = 0, verbose::Int64 = 0)
 
+    if bPlot
+        nArms = length(rewards)
+
+        U = map(mean, rewards)
+        bestArm = argmax(U)
+
+        for i = 1:nArms
+            println("Arm ", i, ": ", string(rewards[i]))
+        end
+
+        print("mean of reward:")
+        for i = 1:nArms
+            print((i == 1) ? " " : ", ", neat(U[i]))
+        end
+        println()
+        println()
+
+        print("Policy: ")
+        if tree_policy[1] == :TS_M
+            str = string(tree_policy[1])
+        elseif tree_policy[1] == :A_UCB
+            str = string(tree_policy[1])
+            str *= "("
+            if length(tree_policy) > 2
+                str *= string(tree_policy[3][1]) * "(" * string(neat(tree_policy[3][2])) * "),"
+            end
+            if length(tree_policy) > 1
+                str *= "["
+                for i = 1:length(tree_policy[2])
+                    if i > 1
+                        str *= ","
+                    end
+                    str *= string(tree_policy[2][i](rewards))
+                end
+                str *= "]"
+            end
+            str *= ")"
+        else
+            str = string(tree_policy[1])
+            if length(tree_policy) > 1
+                str *= "(" * string(tree_policy[2]) * ")"
+            end
+        end
+        println(str)
+        println()
+
+        println("Best arm: ", bestArm)
+        println()
+
+        sleep(0.1)
+    end
+
     if tree_policy[1] == :A_UCB
         if length(tree_policy) == 2
             return A_UCB(rewards, tree_policy[2], n = n, bPlot = bPlot, plotfunc = plotfunc)
@@ -1116,23 +1178,31 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
 
         print("Policy: ")
         if tree_policy[1] == :TS_M
-            println(string(tree_policy[1]))
+            str = string(tree_policy[1])
+        elseif tree_policy[1] == :A_UCB
+            str = string(tree_policy[1])
+            str *= "("
+            if length(tree_policy) > 2
+                str *= string(tree_policy[3][1]) * "(" * string(neat(tree_policy[3][2])) * "),"
+            end
+            if length(tree_policy) > 1
+                str *= "["
+                for i = 1:length(tree_policy[2])
+                    if i > 1
+                        str *= ","
+                    end
+                    str *= string(tree_policy[2][i](rewards))
+                end
+                str *= "]"
+            end
+            str *= ")"
         else
             str = string(tree_policy[1])
             if length(tree_policy) > 1
-                str *= " ["
+                str *= "(" * string(tree_policy[2]) * ")"
             end
-            for i = 2:length(tree_policy)
-                if i > 2
-                    str *= ", "
-                end
-                str *= string(tree_policy[i])
-            end
-            if length(tree_policy) > 1
-                str *= "]"
-            end
-            println(str)
         end
+        println(str)
         println()
 
         println("Best arm: ", bestArm)
@@ -1182,7 +1252,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
             ylim([0, 100])
             xlabel("Number of plays")
             ylabel("% of c played")
-            legend([string(round(Int64, tree_policy[2][i])) for i = 1:length(tree_policy[2])], loc = "best")
+            legend([string(tree_policy[2][i](rewards)) for i = 1:length(tree_policy[2])], loc = "best")
 
             figure()
             for i = 1:length(tree_policy[2])
@@ -1190,7 +1260,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
             end
             xlabel("Number of plays")
             ylabel("Qc")
-            legend([string(round(Int64, tree_policy[2][i])) for i = 1:length(tree_policy[2])], loc = "best")
+            legend([string(tree_policy[2][i](rewards)) for i = 1:length(tree_policy[2])], loc = "best")
 
         elseif tree_policy[1] == :TS
             figure()
@@ -1351,23 +1421,31 @@ function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100,
 
     for tree_policy in tree_policies
         if tree_policy[1] == :TS_M
-            push!(labels, string(tree_policy[1]))
+            str = string(tree_policy[1])
+        elseif tree_policy[1] == :A_UCB
+            str = string(tree_policy[1])
+            str *= "("
+            if length(tree_policy) > 2
+                str *= string(tree_policy[3][1]) * "(" * string(neat(tree_policy[3][2])) * "),"
+            end
+            if length(tree_policy) > 1
+                str *= "["
+                for i = 1:length(tree_policy[2])
+                    if i > 1
+                        str *= ","
+                    end
+                    str *= string(tree_policy[2][i](rewards))
+                end
+                str *= "]"
+            end
+            str *= ")"
         else
             str = string(tree_policy[1])
             if length(tree_policy) > 1
-                str *= " ["
+                str *= "(" * string(tree_policy[2]) * ")"
             end
-            for i = 2:length(tree_policy)
-                if i > 2
-                    str *= ", "
-                end
-                str *= string(tree_policy[i])
-            end
-            if length(tree_policy) > 1
-                str *= "]"
-            end
-            push!(labels, str)
         end
+        push!(labels, str)
 
         Regret_acc, Played_acc, nBestArm = runExpN(rewards, tree_policy, n = n, N = N)
 
