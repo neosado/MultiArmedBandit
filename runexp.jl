@@ -244,6 +244,22 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
             c = 1.
         end
 
+    elseif policy[1] == :TSN_SW
+        tau = policy[2]
+
+        I = zeros(Int64, nSubArms, n)
+        X = zeros(nSubArms, n)
+        X2 = zeros(nSubArms, n)
+
+        Nc_ = zeros(Int64, nSubArms)
+        Qc_ = zeros(nSubArms)
+
+        if length(policy) == 3
+            c = policy[3]
+        else
+            c = 1.
+        end
+
     elseif policy[1] == :D_UCB
         c = policy[2]
         gamma_ = policy[3]
@@ -338,6 +354,50 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
                 end
             end
 
+        elseif policy[1] == :TSN_SW
+            if i - tau < 1
+                tau_ = 1
+            else
+                tau_ = i - tau
+            end
+
+            for j = 1:nSubArms
+                if i != 1
+                    Nc_[j] = sum(I[j, tau_:(i-1)])
+                    if Nc_[j] > 0
+                        Qc_[j] = sum(X[j, tau_:(i-1)]) / Nc_[j]
+                    end
+                end
+                
+                if Nc_[j] < 2
+                    Qv[j] = Inf
+                else
+                    X2c_ = sum(X2[j, tau_:(i-1)])
+
+                    var_[j] = (X2c_ - Nc_[j] * (Qc_[j] * Qc_[j])) / (Nc_[j] - 1)
+                    if abs(var_[j]) < 1.e-7
+                        var_[j] = 0.
+                    end
+
+                    if var_[j] == 0
+                        Qv[j] = Qc_[j]
+                    else
+                        sigma[j] = c * sqrt(var_[j] / Nc_[j])
+                        Qv[j] = rand(Normal(Qc_[j], sigma[j]))
+                    end
+                end
+            end
+
+            j_ = argmax(Qv)
+
+            # XXX debug
+            if false
+                #println(i, " ", j_, " ", Nc_, " ", neat(Qc_), " ", neat(sigma), " ", neat(Qv))
+                if i % 1000 == 0
+                    println(i, " ", Nc_, " ", neat(Qc_), " ", neat(sigma))
+                end
+            end
+
         elseif policy[1] == :D_UCB
             N_ = zeros(nSubArms)
             Q_ = zeros(nSubArms)
@@ -391,10 +451,20 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
 
         a, q = PlaySubArm(subarms[j_])
 
-        if policy[1] == :Exp3
-            w[j_] *= exp(gamma_ * q / p[j_] / K)
+        if policy[1] == :TSN_SW
+            I[j_, i] = 1
+            X[j_, i] = q
+            X2[j_, i] = q * q
+
+        elseif policy[1] == :D_UCB
+            I[j_, i] = 1
+            X[j_, i] = q
+            push!(G, gamma_^(i-1))
 
         elseif policy[1] == :Exp3
+            w[j_] *= exp(gamma_ * q / p[j_] / K)
+
+        elseif policy[1] == :Exp3S
             if q < min_bound
                 q = min_bound
             elseif q > max_bound
@@ -427,12 +497,6 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
                 F[j_] += 1
             end
 
-        end
-
-        if policy[1] == :D_UCB
-            I[j_, i] = 1
-            X[j_, i] = q
-            push!(G, gamma_^(i-1))
         end
 
         Nc_total += 1
