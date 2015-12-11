@@ -2,6 +2,7 @@ using Distributions
 using ConjugatePriors
 using PyPlot
 using Base.Test
+using JLD
 
 import Base: rand, mean, maximum, minimum, string
 import ConjugatePriors: NormalGamma
@@ -221,6 +222,7 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
     Nc_total = 0
     Nc = zeros(Int64, nSubArms)
     Qc = zeros(nSubArms)
+    X2c = zeros(nSubArms)
     Qv_hist = zeros(nArms, n)
 
     Nc_hist = zeros(Int64, nSubArms, n)
@@ -232,7 +234,25 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
         policy = [policy]
     end
 
-    if policy[1] == :Exp3
+    if policy[1] == :UCB1
+        c = policy[2]
+
+    elseif policy[1] == :TSN
+        if length(policy) == 2
+            c = policy[2]
+        else
+            c = 1.
+        end
+
+    elseif policy[1] == :D_UCB
+        c = policy[2]
+        gamma_ = policy[3]
+
+        I = zeros(Int64, nSubArms, n)
+        X = zeros(nSubArms, n)
+        G = Float64[]
+
+    elseif policy[1] == :Exp3
         K = nSubArms
 
         g = n
@@ -240,6 +260,21 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
 
         w = ones(K)
         p = zeros(K)
+
+    elseif policy[1] == :Exp3S
+        K = nSubArms
+        T = n
+
+        alpha = 1 / T
+        #VT = 1/2
+        #gamma_ = minimum(1, ((2 * VT * K * log(K * T)) / ((e - 1)^2 * T))^(1/3))
+        gamma_ = 0.0445
+
+        w = ones(K)
+        p = zeros(K)
+
+        min_bound = minimum([minimum(rewards[i]) for i = 1:nArms])
+        max_bound = maximum([maximum(rewards[i]) for i = 1:nArms])
 
     elseif policy[1] == :TS
         S = zeros(Int64, nSubArms)
@@ -255,18 +290,70 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
             min_bound = minimum([minimum(rewards[i]) for i = 1:nArms])
             max_bound = maximum([maximum(rewards[i]) for i = 1:nArms])
         end
+
     end
 
     for i = 1:n
         Qv = zeros(nSubArms)
+        var_ = zeros(nSubArms)
+        sigma = zeros(nSubArms)
 
         if policy[1] == :UCB1
             for j = 1:nSubArms
                 if Nc[j] == 0
                     Qv[j] = Inf
                 else
-                    c = policy[2]
                     Qv[j] = Qc[j] + c * sqrt(log(Nc_total) / Nc[j])
+                end
+            end
+
+            j_ = argmax(Qv)
+
+        elseif policy[1] == :TSN
+            for j = 1:nSubArms
+                if Nc[j] < 2
+                    Qv[j] = Inf
+                else
+                    var_[j] = (X2c[j] - Nc[j] * (Qc[j] * Qc[j])) / (Nc[j] - 1)
+                    if abs(var_[j]) < 1.e-7
+                        var_[j] = 0.
+                    end
+
+                    if var_[j] == 0
+                        Qv[j] = Qc[j]
+                    else
+                        sigma[j] = c * sqrt(var_[j] / Nc[j])
+                        Qv[j] = rand(Normal(Qc[j], sigma[j]))
+                    end
+                end
+            end
+
+            j_ = argmax(Qv)
+
+            # XXX debug
+            if false
+                #println(i, " ", j_, " ", Nc, " ", neat(Qc), " ", neat(sigma), " ", neat(Qv))
+                if i % 1000 == 0
+                    println(i, " ", Nc, " ", neat(Qc), " ", neat(sigma))
+                end
+            end
+
+        elseif policy[1] == :D_UCB
+            N_ = zeros(nSubArms)
+            Q_ = zeros(nSubArms)
+
+            if i != 1
+                for j = 1:nSubArms
+                    N_[j] = sum(G .* vec(I[j, 1:(i-1)]))
+                    Q_[j] = 1 / N_[j] * sum(G .* vec(X[j, 1:(i-1)]) .* vec(I[j, 1:(i-1)]))
+                end
+            end
+
+            for j = 1:nSubArms
+                if Nc[j] == 0
+                    Qv[j] = Inf
+                else
+                    Qv[j] = Q_[j] + c * sqrt(log(sum(N_)) / N_[j])
                 end
             end
 
@@ -276,7 +363,17 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
             sum_w = sum(w)
 
             for j = 1:K
-                p[j] = (1 - gam) * w[j] / sum_w + gam / K
+                p[j] = (1 - gamma_) * w[j] / sum_w + gamma_ / K
+                Qv[j] = p[j]
+            end
+
+            j_ = sampleFromProb(p)
+
+        elseif policy[1] == :Exp3S
+            sum_w = sum(w)
+
+            for j = 1:K
+                p[j] = (1 - gamma_) * w[j] / sum_w + gamma_ / K
                 Qv[j] = p[j]
             end
 
@@ -295,7 +392,25 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
         a, q = PlaySubArm(subarms[j_])
 
         if policy[1] == :Exp3
-            w[j_] *= exp(gam * q / p[j_] / K)
+            w[j_] *= exp(gamma_ * q / p[j_] / K)
+
+        elseif policy[1] == :Exp3
+            if q < min_bound
+                q = min_bound
+            elseif q > max_bound
+                q = max_bound
+            end
+
+            q_u = (q - min_bound) / (max_bound - min_bound)
+
+            for j = 1:nSubArms
+                if j == j_
+                    q_ = q_u / p[j]
+                else
+                    q_ = 0.
+                end
+                w[j] = w[j] * exp(gamma_ * q_ / K) + e * alpha / K * sum_w
+            end
 
         elseif policy[1] == :TS
             if q < min_bound
@@ -314,9 +429,16 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
 
         end
 
+        if policy[1] == :D_UCB
+            I[j_, i] = 1
+            X[j_, i] = q
+            push!(G, gamma_^(i-1))
+        end
+
         Nc_total += 1
         Nc[j_] += 1
         Qc[j_] += (q - Qc[j_]) / Nc[j_]
+        X2c[j_] += q * q
 
         for j = 1:nSubArms
             Nc_hist[j, i] = Nc[j]
@@ -1070,7 +1192,11 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
                 if typeof(tree_policy[3]) <: Symbol
                     str *= string(tree_policy[3]) * ","
                 else
-                    str *= string(tree_policy[3][1]) * "(" * string(neat(tree_policy[3][2])) * "),"
+                    if length(tree_policy[3]) == 2
+                        str *= string(tree_policy[3][1]) * "(" * string(neat(tree_policy[3][2])) * "),"
+                    elseif length(tree_policy[3]) == 3
+                        str *= string(tree_policy[3][1]) * "(" * string(neat(tree_policy[3][2])) * "," * string(neat(tree_policy[3][3])) * "),"
+                    end
                 end
             end
             if length(tree_policy) > 1
@@ -1124,7 +1250,7 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
 
         if tree_policy[1] == :Exp3
             g = n
-            gam = min(1, sqrt(nArms * log(nArms) / ((e - 1) * g)))
+            gamma_ = min(1, sqrt(nArms * log(nArms) / ((e - 1) * g)))
 
             w = ones(nArms)
             p = zeros(nArms)
@@ -1140,7 +1266,7 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
 
             for a_ = 1:nArms
                 if tree_policy[1] == :Exp3
-                    p[a_] = (1 - gam) * w[a_] / sum_w + gam / nArms
+                    p[a_] = (1 - gamma_) * w[a_] / sum_w + gamma_ / nArms
 
                 else
                     if N[a_] == 0
@@ -1217,7 +1343,7 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
             q = rand(rewards[a])
 
             if tree_policy[1] == :Exp3
-                w[a] *= exp(gam * q / p[a] / nArms)
+                w[a] *= exp(gamma_ * q / p[a] / nArms)
             end
 
             N_total += 1
@@ -1323,7 +1449,7 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
 end
 
 
-function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 0, bPlotAvgRegret::Bool = false, bPlotSubArms::Bool = false)
+function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 0, bPlotAvgRegret::Bool = false, bPlotSubArms::Bool = false, savefile::Union{ASCIIString, Void} = nothing)
 
     nArms = length(rewards)
 
@@ -1436,7 +1562,11 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
                 if typeof(tree_policy[3]) <: Symbol
                     str *= string(tree_policy[3]) * ","
                 else
-                    str *= string(tree_policy[3][1]) * "(" * string(neat(tree_policy[3][2])) * "),"
+                    if length(tree_policy[3]) == 2
+                        str *= string(tree_policy[3][1]) * "(" * string(neat(tree_policy[3][2])) * "),"
+                    elseif length(tree_policy[3]) == 3
+                        str *= string(tree_policy[3][1]) * "(" * string(neat(tree_policy[3][2])) * "," * string(neat(tree_policy[3][3])) * "),"
+                    end
                 end
             end
             if length(tree_policy) > 1
@@ -1662,6 +1792,17 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
         ylim([0, 100])
         xlabel("Number of plays")
         ylabel("% of best arm played")
+    end
+
+    if savefile != nothing
+        jldopen(savefile, "w") do file
+            write(file, "R", Regret_acc ./ collect(1:n))
+            if tree_policy[1] == :A_UCB && bPlotSubArms
+                for i = 1:nSubArms
+                    write(file, "R" * string(i), vec(Regret_subarms_acc[i, :]) ./ vec(Nc_hist_acc[i, :]))
+                end
+            end
+        end
     end
     
     return Regret_acc, Played_acc, nBestArm
