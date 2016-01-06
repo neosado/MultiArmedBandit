@@ -112,7 +112,7 @@ type UCBSubArm
     
     rewards
 
-    c::Float64
+    c::Union{Int64, Float64}
     
     nArms::Int64
 
@@ -127,7 +127,7 @@ type UCBSubArm
     Q_hist::Vector{Vector{Float64}}
     
 
-    function UCBSubArm(rewards, c::Float64 = sqrt(2))
+    function UCBSubArm(rewards, c::Union{Int64, Float64} = sqrt(2))
         
         self = new()
         
@@ -156,7 +156,7 @@ type UCBSubArm
     end
 end
 
-genUCBSubArm(c::Float64) = rewards -> UCBSubArm(rewards, c)
+genUCBSubArm(c) = rewards -> UCBSubArm(rewards, c)
 
 function PlaySubArm(subarm::UCBSubArm)
 
@@ -188,11 +188,15 @@ end
 
 function string(subarm::UCBSubArm)
 
-    return "UCB1(" * string(neat(subarm.c)) * ")"
+    if typeof(subarm.c) <: Int64
+        return "UCB1(" * string(subarm.c) * ")"
+    else
+        return "UCB1(" * string(neat(subarm.c)) * ")"
+    end
 end
 
 
-function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy = nothing, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 1, bPlotAvgRegret::Bool = false, bPlotSubArms::Bool = false)
+function AUCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy = nothing, bPlot::Bool = false, plotfunc::Symbol = :semilogx, verbose::Int64 = 1, bPlotAvgRegret::Bool = false, bPlotSubArms::Bool = false)
 
     nArms = length(rewards)
 
@@ -229,7 +233,7 @@ function A_UCB(rewards, genSubArms::Vector{Function}; n::Int64 = 10000, policy =
     Qc_hist = zeros(nSubArms, n)
 
     if policy == nothing
-        policy = [:UCB1, sqrt(2)]
+        policy = [:TSN]
     elseif typeof(policy) <: Symbol
         policy = [policy]
     end
@@ -1247,9 +1251,9 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
         println()
 
         print("Policy: ")
-        if tree_policy[1] == :TS_M
+        if tree_policy[1] == :TSM
             str = "TSM"
-        elseif tree_policy[1] == :A_UCB
+        elseif tree_policy[1] == :AUCB
             str = "A-UCB"
             str *= "("
             if length(tree_policy) > 2
@@ -1286,17 +1290,17 @@ function runExp(rewards, tree_policy; n::Int64 = 10000, bPlot::Bool = false, plo
         println("Best arm: ", bestArm)
     end
 
-    if tree_policy[1] == :A_UCB
+    if tree_policy[1] == :AUCB
         if length(tree_policy) == 2
-            return A_UCB(rewards, tree_policy[2], n = n, bPlot = bPlot, plotfunc = plotfunc, bPlotAvgRegret = bPlotAvgRegret, bPlotSubArms = bPlotSubArms)
+            return AUCB(rewards, tree_policy[2], n = n, bPlot = bPlot, plotfunc = plotfunc, bPlotAvgRegret = bPlotAvgRegret, bPlotSubArms = bPlotSubArms)
         elseif length(tree_policy) == 3
-            return A_UCB(rewards, tree_policy[2], n = n, policy = tree_policy[3], bPlot = bPlot, plotfunc = plotfunc, bPlotAvgRegret = bPlotAvgRegret, bPlotSubArms = bPlotSubArms)
+            return AUCB(rewards, tree_policy[2], n = n, policy = tree_policy[3], bPlot = bPlot, plotfunc = plotfunc, bPlotAvgRegret = bPlotAvgRegret, bPlotSubArms = bPlotSubArms)
         end
 
     elseif tree_policy[1] == :TS
         return ThompsonSampling(rewards, n = n, bPlot = bPlot, plotfunc = plotfunc)
 
-    elseif tree_policy[1] == :TS_M
+    elseif tree_policy[1] == :TSM
         return ThompsonSamplingWithModel(rewards, tree_policy[2], n = n, bPlot = bPlot, plotfunc = plotfunc)
 
     else
@@ -1530,7 +1534,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
     Regret_end = zeros(N)
     Played_end = zeros(N)
 
-    if tree_policy[1] == :A_UCB
+    if tree_policy[1] == :AUCB
         nSubArms = length(tree_policy[2])
         c_hist_acc = zeros(nSubArms, n)
         Qc_hist_acc = zeros(nSubArms, n)
@@ -1540,7 +1544,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
         end
     elseif tree_policy[1] == :TS
         S_hist_acc = zeros(nArms, n)
-    elseif tree_policy[1] == :TS_M
+    elseif tree_policy[1] == :TSM
         V_hist_acc = zeros(nArms, n)
         mu_hist_acc = zeros(nArms, n)
         sigma_hist_acc = zeros(nArms, n)
@@ -1552,7 +1556,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
     bestArm = argmax(U)
 
     for i = 1:N
-        if tree_policy[1] == :A_UCB
+        if tree_policy[1] == :AUCB
             if bPlotSubArms
                 N_total, N_, N_hist, Q, Q_hist, Qv_hist, Regret, Played, c_hist, Qc_hist, Regret_subarms, Nc_hist = runExp(rewards, tree_policy, n = n, bPlotAvgRegret = bPlotAvgRegret, bPlotSubArms = bPlotSubArms)
             else
@@ -1560,7 +1564,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
             end
         elseif tree_policy[1] == :TS
             N_total, N_, N_hist, Q, Q_hist, Qv_hist, Regret, Played, S_hist = runExp(rewards, tree_policy, n = n)
-        elseif tree_policy[1] == :TS_M
+        elseif tree_policy[1] == :TSM
             N_total, N_, N_hist, Q, Q_hist, Qv_hist, Regret, Played, V_hist, mu_hist, sigma_hist, mu_v_hist, sigma_v_hist = runExp(rewards, tree_policy, n = n)
         else
             N_total, N_, N_hist, Q, Q_hist, Qv_hist, Regret, Played = runExp(rewards, tree_policy, n = n)
@@ -1584,7 +1588,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
         Regret_end[i] = Regret[end]
         Played_end[i] = Played[end]
 
-        if tree_policy[1] == :A_UCB
+        if tree_policy[1] == :AUCB
             c_hist_acc += (c_hist .- c_hist_acc) / i
             Qc_hist_acc += (Qc_hist .- Qc_hist_acc) / i
             if bPlotSubArms
@@ -1595,7 +1599,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
             end
         elseif tree_policy[1] == :TS
             S_hist_acc += (S_hist .- S_hist_acc) / i
-        elseif tree_policy[1] == :TS_M
+        elseif tree_policy[1] == :TSM
             V_hist_acc += (V_hist .- V_hist_acc) / i
             mu_hist_acc += (mu_hist .- mu_hist_acc) / i
             sigma_hist_acc += (sigma_hist .- sigma_hist_acc) / i
@@ -1617,9 +1621,9 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
         println()
 
         print("Policy: ")
-        if tree_policy[1] == :TS_M
+        if tree_policy[1] == :TSM
             str = "TSM"
-        elseif tree_policy[1] == :A_UCB
+        elseif tree_policy[1] == :AUCB
             str = "A-UCB"
             str *= "("
             if length(tree_policy) > 2
@@ -1692,7 +1696,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
             plotfunc = :plot
         end
 
-        if tree_policy[1] == :A_UCB
+        if tree_policy[1] == :AUCB
             figure()
             for i = 1:length(tree_policy[2])
                 eval(plotfunc)(1:n, vec(c_hist_acc[i, :]) * 100)
@@ -1730,7 +1734,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
             ylabel("Theta")
             legend([string(i) for i = 1:nArms], loc = "best")
 
-        elseif tree_policy[1] == :TS_M
+        elseif tree_policy[1] == :TSM
             figure()
             for i = 1:nArms
                 eval(plotfunc)(1:n, vec(V_hist_acc[i, :]))
@@ -1795,10 +1799,10 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
         legend([string(i) for i = 1:nArms], loc = "best")
 
         if verbose > 0
-            if tree_policy[1] != :A_UCB
+            if tree_policy[1] != :AUCB
                 figure()
                 for i = 1:nArms
-                    if tree_policy[1] == :TS_M
+                    if tree_policy[1] == :TSM
                         plot(1:n, vec(Qv_hist_acc[i, :]))
                     else
                         eval(plotfunc)(1:n, vec(Qv_hist_acc[i, :]))
@@ -1812,7 +1816,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
 
         figure()
         eval(plotfunc)(1:n, Regret_acc)
-        if tree_policy[1] == :A_UCB && bPlotSubArms
+        if tree_policy[1] == :AUCB && bPlotSubArms
             for i = 1:nSubArms
                 eval(plotfunc)(1:n, vec(Regret_subarms_acc[i, :]) / N)
             end
@@ -1832,7 +1836,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
             figure()
             eval(plotfunc)(1:n, Regret_acc ./ collect(1:n))
 
-            if tree_policy[1] == :A_UCB && bPlotSubArms
+            if tree_policy[1] == :AUCB && bPlotSubArms
                 for i = 1:nSubArms
                     eval(plotfunc)(1:n, vec(Regret_subarms_acc[i, :]) ./ vec(Nc_hist_acc[i, :]))
                 end
@@ -1861,7 +1865,7 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
     if savefile != nothing
         jldopen(savefile, "w") do file
             write(file, "R", Regret_acc ./ collect(1:n))
-            if tree_policy[1] == :A_UCB && bPlotSubArms
+            if tree_policy[1] == :AUCB && bPlotSubArms
                 for i = 1:nSubArms
                     write(file, "R" * string(i), vec(Regret_subarms_acc[i, :]) ./ vec(Nc_hist_acc[i, :]))
                 end
@@ -1873,22 +1877,55 @@ function runExpN(rewards, tree_policy; n::Int64 = 10000, N::Int64 = 100, bPlot::
 end
 
 
-function plotExpParam(rewards, tree_policy, params; n::Int64 = 10000, N::Int64 = 100, plotfunc::Symbol = :semilogx)
+function plotExpParam(rewards, tree_policy, params; n::Int64 = 10000, N::Int64 = 100, plotfunc::Symbol = :semilogx, bPlotAvgRegret::Bool = false)
+
+    nArms = length(rewards)
+
+    U = map(mean, rewards)
+    bestArm = argmax(U)
+
+    for i = 1:nArms
+        println("Arm ", i, ": ", string(rewards[i]))
+    end
+
+    print("mean of reward:")
+    for i = 1:nArms
+        print((i == 1) ? " " : ", ", neat(U[i]))
+    end
+    println()
+    println()
+
+    println("Best arm: ", bestArm)
+    println()
+
+    sleep(0.1)
 
     labels = ASCIIString[]
 
     for param in params
-        push!(labels, string(neat(param)))
+        push!(labels, string(tree_policy) * "(" * string(param) * ")")
 
         Regret_acc, Played_acc, nBestArm = runExpN(rewards, Any[tree_policy, param], n = n, N = N)
 
         #println("Tree Policy: ", tree_policy[1], ", Param: ", param, ", nBestArm: ", nBestArm, " / ", N)
         #sleep(0.1)
         
+        if n < 101
+            plotfunc = :plot
+        end
+        
         figure(1)
-        eval(plotfunc)(1:n, Regret_acc)
+        if !bPlotAvgRegret
+            eval(plotfunc)(1:n, Regret_acc)
+        else
+            plot(1:n, Regret_acc ./ collect(1:n))
+        end
         xlabel("Number of plays")
-        ylabel("Regret")
+        if !bPlotAvgRegret
+            ylabel("Regret")
+        else
+            ylabel("Average regret")
+        end
         legend(labels, loc = "best")
 
         figure(2)
@@ -1927,9 +1964,9 @@ function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100,
     labels = ASCIIString[]
 
     for tree_policy in tree_policies
-        if tree_policy[1] == :TS_M
+        if tree_policy[1] == :TSM
             str = "TSM"
-        elseif tree_policy[1] == :A_UCB
+        elseif tree_policy[1] == :AUCB
             str = "A-UCB"
             str *= "("
             if length(tree_policy) > 2
