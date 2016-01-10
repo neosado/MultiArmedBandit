@@ -1938,7 +1938,7 @@ function plotExpParam(rewards, tree_policy, params; n::Int64 = 10000, N::Int64 =
 end
 
 
-function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100, plotfunc::Symbol = :semilogx, bPlotAvgRegret::Bool = false)
+function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100, plotfunc::Symbol = :semilogx, bPlotAvgRegret::Bool = false, bSave::Bool = false)
 
     nArms = length(rewards)
 
@@ -1960,6 +1960,11 @@ function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100,
     println()
 
     sleep(0.1)
+
+    if bSave
+        f = open("data.txt", "w")
+        k = 1
+    end
 
     labels = ASCIIString[]
 
@@ -1997,6 +2002,19 @@ function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100,
 
         Regret_acc, Played_acc, nBestArm = runExpN(rewards, tree_policy, n = n, N = N, bPlotAvgRegret = bPlotAvgRegret)
 
+        if bSave
+            if k == 1
+                write(f, "n ")
+                writedlm(f, collect(1:n)', " ")
+            end
+            write(f, "regret" * string(k) * " ")
+            writedlm(f, Regret_acc', " ")
+            write(f, "best" * string(k) * " ")
+            writedlm(f, Played_acc' * 100, " ")
+
+            k += 1
+        end
+
         #println("Tree Policy: ", tree_policy[1], ", nBestArm: ", nBestArm, " / ", N)
         #sleep(0.1)
 
@@ -2024,6 +2042,10 @@ function plotExpPolicy(rewards, tree_policies; n::Int64 = 10000, N::Int64 = 100,
         xlabel("Number of plays")
         ylabel("% of best arm played")
         legend(labels, loc = "best")
+    end
+
+    if bSave
+        close(f)
     end
 end
 
