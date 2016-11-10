@@ -80,12 +80,9 @@ function rand_param()
 end
 
 
-#param = rand_param()
-#results = runRangeTest(param)
-
-
 param_list = vec([[p1, -1000, p2, abs(p2 / rand(2:5)), p3, -1000, p4, abs(p4 / rand(2:5))] for p1 = 0:0.1:1, p2 = 10:10:100, p3 = 0:0.1:1, p4 = 10:10:100])
 
+#results = runRangeTest(rand_param())
 results = pmap(runRangeTest_, param_list)
 
 save("rtest.jld", "results", results)

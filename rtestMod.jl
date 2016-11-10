@@ -23,8 +23,7 @@ end
 function runRangeTest(param)
 
     n = 10000
-    #N = 100
-    N = 1
+    N = 100
 
     rewards = [RareDist(param[1], param[2], Truncated(Normal(param[3], param[4]), param[3] - 5 * param[4], min(param[3] + 5 * param[4], 0))), RareDist(param[5], param[6], Truncated(Normal(param[7], param[8]), param[7] - 5 * param[8], min(param[7] + 5 * param[8], 0)))]
 
