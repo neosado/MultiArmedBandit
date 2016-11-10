@@ -40,7 +40,7 @@ function CEOpt_(param)
     p_init = [max(abs(mean(rewards[1])), abs(mean(rewards[2]))),
     abs(abs(mean(rewards[1])) - abs(mean(rewards[2])))]
 
-    exp_n = 100000
+    exp_n = 10000
     exp_N = 1
 
     N = 100

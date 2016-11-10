@@ -49,7 +49,7 @@ function CEOpt(sample::Function, p0::Any, perf::Function, update::Function, N::I
         t += 1
     end
 
-    return p
+    return round(Int64, p)
 end
 
 

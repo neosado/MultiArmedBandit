@@ -1,4 +1,4 @@
-addprocs(round(Int64, CPU_CORES - 2))
+addprocs(CPU_CORES - 2)
 
 push!(LOAD_PATH, ".")
 using coefMod
@@ -40,7 +40,7 @@ for i = 1:100
         c_max = maximum(results)
     end
     
-    println(100 * i, ": ", round(Int32, c_min), " ", round(Int32, c_max))
+    println(100 * i, ": ", c_min, " ", c_max)
 end
 
 
