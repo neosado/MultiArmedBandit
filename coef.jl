@@ -1,4 +1,4 @@
-addprocs(round(Int64, CPU_CORES / 2))
+addprocs(round(Int64, CPU_CORES - 2))
 
 push!(LOAD_PATH, ".")
 using coefMod
@@ -27,8 +27,8 @@ srand(12)
 c_min = typemax(Int32)
 c_max = typemin(Int32)
 
-for i = 1:10
-    param_list = Any[rand_param() for i = 1:4]
+for i = 1:100
+    param_list = Any[rand_param() for i = 1:100]
 
     results = pmap(CEOpt_, param_list)
 
@@ -40,7 +40,7 @@ for i = 1:10
         c_max = maximum(results)
     end
     
-    println(4 * i, ": ", round(Int32, c_min), " ", round(Int32, c_max))
+    println(100 * i, ": ", round(Int32, c_min), " ", round(Int32, c_max))
 end
 
 
