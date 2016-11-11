@@ -85,6 +85,6 @@ param_list = vec([[p1, -1000, -p2, p2 / rand(2:5), p3, -1000, -p4, p4 / rand(2:5
 #results = runRangeTest(rand_param())
 results = pmap(runRangeTest_, param_list)
 
-save("rtest.jld", "results", results)
+save("results.jld", "results", results)
 
 
