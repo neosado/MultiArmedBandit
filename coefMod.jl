@@ -37,8 +37,9 @@ function CEOpt_(param)
 
     rewards = [RareDist(param[1], param[2], Truncated(Normal(param[3], param[4]), param[3] - 5 * param[4], min(param[3] + 5 * param[4], 0))), RareDist(param[5], param[6], Truncated(Normal(param[7], param[8]), param[7] - 5 * param[8], min(param[7] + 5 * param[8], 0)))]
 
-    p_init = [max(abs(mean(rewards[1])), abs(mean(rewards[2]))),
-    abs(abs(mean(rewards[1])) - abs(mean(rewards[2])))]
+    p_init_mean = max(abs(mean(rewards[1])), abs(mean(rewards[2])))
+    p_init_sigma = max(abs(param[2] / 10), abs(param[6] / 10))
+    p_init = [p_init_mean, p_init_sigma]
 
     exp_n = 10000
     exp_N = 1
