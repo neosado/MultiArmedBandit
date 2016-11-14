@@ -17,7 +17,7 @@ function loadData(datafile::ASCIIString)
 end
 
 
-function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Float64, Float64, Float64, Float64, Float64, Float64}}, p1::Float64, m1::Float64, p2::Float64, m2::Float64; bFixProb::Bool = true, fig = nothing)
+function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Float64, Float64, Float64, Float64, Float64, Float64}}, p1::Float64, m1::Float64, p2::Float64, m2::Float64; bFixProb::Bool = true, fig = nothing, bDraw = true)
 
     if bFixProb
         M = zeros(Int64, 10, 10)
@@ -41,33 +41,38 @@ function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Flo
         end
     end
 
-    if fig == nothing
-        fig = figure(facecolor = "white")
+    if bDraw
+        if fig == nothing
+            fig = figure(facecolor = "white")
+        end
+        ax1 = fig[:add_subplot](111)
+        if bFixProb
+            ax1[:set_xlim](-0.5, 9.5)
+            ax1[:set_ylim](-0.5, 9.5)
+        else
+            ax1[:set_xlim](-0.5, 10.5)
+            ax1[:set_ylim](-0.5, 10.5)
+        end
+        ax1[:set_aspect]("equal")
+        ax1[:invert_yaxis]()
+        if bFixProb
+            ax1[:set_xticks](collect(0.5:8.5))
+            ax1[:set_yticks](collect(0.5:8.5))
+        else
+            ax1[:set_xticks](collect(0.5:9.5))
+            ax1[:set_yticks](collect(0.5:9.5))
+        end
+        ax1[:set_xticklabels]([])
+        ax1[:set_yticklabels]([])
+        ax1[:grid](true)
+        ax1[:set_title]("Policy")
+        ax1[:imshow](M, alpha = 0.5, interpolation = "none", vmin = 1, vmax = 6)
     end
-    ax1 = fig[:add_subplot](111)
-    if bFixProb
-        ax1[:set_xlim](-0.5, 9.5)
-        ax1[:set_ylim](-0.5, 9.5)
-    else
-        ax1[:set_xlim](-0.5, 10.5)
-        ax1[:set_ylim](-0.5, 10.5)
-    end
-    ax1[:set_aspect]("equal")
-    ax1[:invert_yaxis]()
-    if bFixProb
-        ax1[:set_xticks](collect(0.5:8.5))
-        ax1[:set_yticks](collect(0.5:8.5))
-    else
-        ax1[:set_xticks](collect(0.5:9.5))
-        ax1[:set_yticks](collect(0.5:9.5))
-    end
-    ax1[:set_xticklabels]([])
-    ax1[:set_yticklabels]([])
-    ax1[:grid](true)
-    ax1[:set_title]("Policy")
-    ax1[:imshow](M, alpha = 0.5, interpolation = "none", vmin = 1, vmax = 6)
 
     return M
 end
+
+
+#println(plotPolicy(loadData("data_range/results.jld"), 0., -10., 0., -20., bFixProb = false, bDraw = false))
 
 
