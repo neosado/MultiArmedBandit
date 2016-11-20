@@ -18,7 +18,7 @@ function loadData(datafile::ASCIIString)
 end
 
 
-function postProc(param::Tuple{Float64, Float64, Float64, Float64}, result::Tuple{Float64, Float64, Float64, Float64, Float64, Float64}; threshold::Float64 = 0.001, bNewIndex::Bool = false)
+function postProc(param::Tuple{Float64, Float64, Float64, Float64}, result::Union{Tuple{Float64, Float64, Float64, Float64, Float64, Float64}, Vector{Float64}}; threshold::Float64 = 0.001, bNewIndex::Bool = false)
 
     ind = indmin(result)
 
@@ -131,9 +131,7 @@ function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Flo
 end
 
 
-function compStat(datafile::ASCIIString, bPostProc::Bool = true; threshold::Float64 = 0.001, bNewIndex::Bool = false)
-
-    D = loadData(datafile)
+function compStat(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Float64, Float64, Float64, Float64, Float64, Float64}}, bPostProc::Bool = true; threshold::Float64 = 0.001, bNewIndex::Bool = false, ruleout::Union{Vector{Int64}, Void} = nothing)
 
     if !bNewIndex
         S = zeros(Int64, 6)
@@ -145,11 +143,20 @@ function compStat(datafile::ASCIIString, bPostProc::Bool = true; threshold::Floa
         for m1 = -10.:-10:-100
             for p2 = 0.:0.01:0.1
                 for m2 = -10.:-10:-100
-                    if bPostProc
-                        ind = postProc((p1, m1, p2, m2), D[(p1, m1, p2, m2)], threshold = threshold, bNewIndex = bNewIndex)
-                    else
-                        ind = indmin(D[(p1, m1, p2, m2)])
+                    result = collect(D[(p1, m1, p2, m2)])
+
+                    if ruleout != nothing
+                        for i in ruleout
+                            result[i] = typemax(Int64)
+                        end
                     end
+
+                    if bPostProc
+                        ind = postProc((p1, m1, p2, m2), result, threshold = threshold, bNewIndex = bNewIndex)
+                    else
+                        ind = indmin(result)
+                    end
+
                     S[ind] += 1
                 end
             end
@@ -177,6 +184,9 @@ end
 #println(plotPolicy(loadData("data_range/results.jld"), 0.1, -10., 0.01, -20., bFixProb = false, bDraw = true))
 #show()
 
-#println(compStat("data_range/results.jld"))
+#D = loadData("data_range/results.jld")
+#println(compStat(D))
+#println(compStat(D, ruleout = [5, 6]))
+#println(compStat(D, ruleout = [4]))
 
 
