@@ -54,7 +54,7 @@ function postProc(param::Tuple{Float64, Float64, Float64, Float64}, result::Unio
 end
 
 
-function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Float64, Float64, Float64, Float64, Float64, Float64}}, p1::Float64, m1::Float64, p2::Float64, m2::Float64; bFixProb::Bool = true, bPostProc::Bool = true, threshold::Float64 = 0.001, fig = nothing, bDraw = true)
+function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Float64, Float64, Float64, Float64, Float64, Float64}}, p1::Float64, m1::Float64, p2::Float64, m2::Float64; bFixProb::Bool = true, bPostProc::Bool = true, threshold::Float64 = 0.001, ruleout::Union{Vector{Int64}, Void} = nothing, fig = nothing, bDraw = true)
 
     if bFixProb
         M = zeros(Int64, 10, 10)
@@ -63,10 +63,16 @@ function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Flo
             for j = 1:10
                 m1 = -10. * i
                 m2 = -10. * j
+                result = collect(D[(p1, m1, p2, m2)])
+                if ruleout != nothing
+                    for k in ruleout
+                        result[k] = typemax(Int64)
+                    end
+                end
                 if bPostProc
-                    M[i, j] = postProc((p1, m1, p2, m2), D[(p1, m1, p2, m2)], threshold = threshold)
+                    M[i, j] = postProc((p1, m1, p2, m2), result, threshold = threshold)
                 else
-                    M[i, j] = indmin(D[(p1, m1, p2, m2)])
+                    M[i, j] = indmin(result)
                 end
             end
         end
@@ -77,10 +83,16 @@ function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Flo
             for j = 1:11
                 p1 = 0.01 * (i - 1)
                 p2 = 0.01 * (j - 1)
+                result = collect(D[(p1, m1, p2, m2)])
+                if ruleout != nothing
+                    for k in ruleout
+                        result[k] = typemax(Int64)
+                    end
+                end
                 if bPostProc
-                    M[i, j] = postProc((p1, m1, p2, m2), D[(p1, m1, p2, m2)], threshold = threshold)
+                    M[i, j] = postProc((p1, m1, p2, m2), result, threshold = threshold)
                 else
-                    M[i, j] = indmin(D[(p1, m1, p2, m2)])
+                    M[i, j] = indmin(result)
                 end
             end
         end
@@ -181,7 +193,7 @@ end
 #    end
 #end
 
-#println(plotPolicy(loadData("data_range/results.jld"), 0.1, -10., 0.01, -20., bFixProb = false, bDraw = true))
+#println(plotPolicy(loadData("data_range/results.jld"), 0.1, -10., 0.01, -20., bFixProb = true, bPostProc = true, ruleout = [4], bDraw = true))
 #show()
 
 #D = loadData("data_range/results.jld")
