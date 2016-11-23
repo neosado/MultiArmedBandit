@@ -54,7 +54,7 @@ function postProc(param::Tuple{Float64, Float64, Float64, Float64}, result::Unio
 end
 
 
-function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Float64, Float64, Float64, Float64, Float64, Float64}}, p1::Float64, m1::Float64, p2::Float64, m2::Float64; bFixProb::Bool = true, bPostProc::Bool = true, threshold::Float64 = 0.001, ruleout::Union{Vector{Int64}, Void} = nothing, fig = nothing, bDraw = true)
+function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Float64, Float64, Float64, Float64, Float64, Float64}}, p1::Float64, m1::Float64, p2::Float64, m2::Float64; bFixProb::Bool = true, bPostProc::Bool = true, threshold::Float64 = 0.001, ruleout::Union{Vector{Int64}, Void} = nothing, fig = nothing, bDraw::Bool = true, bSave::Bool = false)
 
     if bFixProb
         M = zeros(Int64, 10, 10)
@@ -107,36 +107,51 @@ function plotPolicy(D::Dict{Tuple{Float64, Float64, Float64, Float64}, Tuple{Flo
             ax1[:set_xlim](-0.5, 9.5)
             ax1[:set_xticks](collect(0.5:8.5))
             ax1[:set_xticklabels]([])
-            ax1[:set_xticks](collect(0:9), minor = true)
-            ax1[:set_xticklabels]([-10 * i for i = 1:10], minor = true)
-            ax1[:set_xlabel](L"$m_1$")
+            if !bSave
+                ax1[:set_xticks](collect(0:9), minor = true)
+                ax1[:set_xticklabels]([-10 * i for i = 1:10], minor = true)
+                ax1[:set_xlabel](L"$\mu_1$")
+            end
             ax1[:set_ylim](-0.5, 9.5)
             ax1[:set_yticks](collect(0.5:8.5))
             ax1[:set_yticklabels]([])
-            ax1[:set_yticks](collect(0:9), minor = true)
-            ax1[:set_yticklabels]([-10 * i for i = 1:10], minor = true)
-            ax1[:set_ylabel](L"$m_2$", labelpad = 15, rotation = 0)
+            if !bSave
+                ax1[:set_yticks](collect(0:9), minor = true)
+                ax1[:set_yticklabels]([-10 * i for i = 1:10], minor = true)
+                ax1[:set_ylabel](L"$\mu_2$", labelpad = 15, rotation = 0)
+            end
         else
             ax1[:set_xlim](-0.5, 10.5)
             ax1[:set_xticks](collect(0.5:9.5))
             ax1[:set_xticklabels]([])
-            ax1[:set_xticks](collect(0:10), minor = true)
-            ax1[:set_xticklabels]([0.01 * i for i = 0:10], minor = true)
-            ax1[:set_xlabel](L"$p_1$")
-
+            if !bSave
+                ax1[:set_xticks](collect(0:10), minor = true)
+                ax1[:set_xticklabels]([0.01 * i for i = 0:10], minor = true)
+                ax1[:set_xlabel](L"$p_1$")
+            end
             ax1[:set_ylim](-0.5, 10.5)
             ax1[:set_yticks](collect(0.5:9.5))
             ax1[:set_yticklabels]([])
-            ax1[:set_yticks](collect(0:10), minor = true)
-            ax1[:set_yticklabels]([0.01 * i for i = 0:10], minor = true)
-            ax1[:set_ylabel](L"$p_2$", labelpad = 15, rotation = 0)
+            if !bSave
+                ax1[:set_yticks](collect(0:10), minor = true)
+                ax1[:set_yticklabels]([0.01 * i for i = 0:10], minor = true)
+                ax1[:set_ylabel](L"$p_2$", labelpad = 15, rotation = 0)
+            end
         end
         ax1[:set_aspect]("equal")
         ax1[:grid](true)
-        ax1[:set_title]("Best Policy")
+        if !bSave
+            ax1[:set_title]("Best Policy")
+        end
         cax = ax1[:imshow](flipdim(rotl90(M), 1), alpha = 0.5, interpolation = "none", vmin = 1, vmax = 6)
-        cbar = fig[:colorbar](cax, ticks = [1, 2, 3, 4, 5, 6], boundaries = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5])
-        cbar[:ax][:set_yticklabels](["UCB1(CE)", "UCB1(1)", "UCB1(240)", "A-UCB(1,240)", "TS", "TSM"])
+        if !bSave
+            cbar = fig[:colorbar](cax, ticks = [1, 2, 3, 4, 5, 6], boundaries = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5])
+            cbar[:ax][:set_yticklabels](["UCB1(CE)", "UCB1(10)", "UCB1(350)", "A-UCB(10,350)", "TS", "TSM"])
+        end
+    end
+
+    if bSave
+        savefig("policy.png")
     end
 
     return rotl90(M)
@@ -198,7 +213,7 @@ end
 
 #D = loadData("data_range/results.jld")
 #println(compStat(D))
-#println(compStat(D, ruleout = [5, 6]))
-#println(compStat(D, ruleout = [4]))
+#println(compStat(D, ruleout = [1, 5, 6]))
+#println(compStat(D, ruleout = [1, 4]))
 
 

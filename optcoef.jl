@@ -28,12 +28,12 @@ function updateParam(X, S, gamma_)
 end
 
 
-rewards = [RareDist(0., -1000., Truncated(Normal(-30, 4), -50, -10)), RareDist(0., -1000., Truncated(Normal(-70, 10), -120, -20))]
+rewards = [RareDist(0.01, -1000., Truncated(Normal(-30, 4), -50, -10)), RareDist(0., -1000., Truncated(Normal(-70, 10), -120, -20))]
 
 N = 100
 rho = log(N) / N
 
-p = CEOpt(drawSample, [150, 150], computePerf(rewards, 10000, 1), updateParam, N, rho, debug = 1)
+p = CEOpt(drawSample, [150, 150], computePerf(rewards, 10000, 100), updateParam, N, rho, debug = 1)
 
 println(p)
 
